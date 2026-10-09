@@ -1,0 +1,52 @@
+# ===== STM32CubeIDE / Eclipse =====
+Debug/
+Release/
+.settings/
+*.launch
+.mxproject
+*.ioc.bak
+
+# 说明：.project / .cproject / .ioc 建议【保留提交】，
+# 这样换台电脑 clone 下来就能直接打开工程。
+
+# ===== Keil MDK-ARM =====
+Objects/
+Listings/
+RTE/
+*.uvguix.*
+*.uvoptx
+*.uvprojx.bak
+*.o
+*.d
+*.crf
+*.axf
+*.lnp
+*.lst
+*.map
+*.htm
+*.dep
+*.bak
+*.scvd
+*.iex
+*.ini
+JLinkLog.txt
+JLinkSettings.ini
+
+# ===== 编译与烧录产物 =====
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.a
+
+# ===== 编辑器 / IDE =====
+.vscode/
+.idea/
+*.swp
+*~
+
+# ===== 操作系统 =====
+Thumbs.db
+Desktop.ini
+.DS_Store
