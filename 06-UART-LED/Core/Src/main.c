@@ -45,8 +45,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t Rxbuff[3] = {0};   /* 接收缓冲区：逐字节拼命令用，3 格正好装下 "OFF" */
-uint8_t count   = 0;       /* 接收计数：记「本次命令已收到第几个字节」——中断分批进来，跨批次的进度必须用全局变量记 */
+uint8_t Rxbuff[3] = {0};   /* 接收缓冲区，正好装下 "OFF" */
+uint8_t count   = 0;       /* 收到第几个字节（全局变量，跨回调记忆） */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,11 +91,9 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  /* 挂上接收：length=1，所以每来 1 个字节就进一次回调（单字节模式）。
-     第一次写入位置是 Rxbuff[0]，之后在回调里会挂到 &Rxbuff[count] 往后继续拼。 */
-  HAL_UART_Receive_IT(&huart2, Rxbuff, 1);
+  HAL_UART_Receive_IT(&huart2, Rxbuff, 1);  /* 单字节模式：每收 1 字节进一次回调 */
 
-  printf("ON=led open OFF=led down\r\n");   /* 开机提示：告诉 PC 支持哪些命令 */
+  printf("ON=led open OFF=led down\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -150,57 +148,43 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-/**
-  * @brief  接收完成回调 —— 每收到 1 个字节就会被调用一次（挂接收时 length=1）
-  * @param  huart 触发这次回调的串口句柄
-  * @note   函数名不能改：它是 HAL 里的 __weak 空函数，同名重写才会被调用
-  */
+/* 接收回调：每收 1 字节进一次（挂接收时 length=1）；HAL __weak 函数，名字不能改 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  if (huart->Instance == USART2)        /* 多个串口共用一个回调，必须判断是谁触发的 */
+  if (huart->Instance == USART2)        /* 判断是哪个串口触发 */
   {
-    count++;                            /* 数「这是本次命令的第几个字节」；只有全局变量能跨回调记住它 */
+    count++;                            /* 数到第几个字节 */
 
-    /* 长度 + 内容双条件：先数够 2 个，再比对是不是 "ON"。
-       只比内容不比长度的话，收到 "ONx" 这种 3 字节数据也会误判点灯。 */
-    if (count == 2 && strncmp((char *)Rxbuff, "ON", 2) == 0)
+    if (count == 2 && strncmp((char *)Rxbuff, "ON", 2) == 0)    /* 长度+内容双条件 */
     {
       printf("LED ON\r\n");
-      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);    /* 点亮 LED */
-      count = 0;                              /* 一条命令处理完：计数归零 */
-      memset(Rxbuff, 0, sizeof(Rxbuff));      /* 缓冲区也清掉，防止旧字符残留影响下一条命令 */
+      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+      count = 0;
+      memset(Rxbuff, 0, sizeof(Rxbuff));
     }
     else if (count == 3 && strncmp((char *)Rxbuff, "OFF", 3) == 0)
     {
       printf("LED OFF\r\n");
-      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);  /* 熄灭 LED */
+      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
       count = 0;
       memset(Rxbuff, 0, sizeof(Rxbuff));
     }
 
-    /* ★ 越界保护：Rxbuff 只有 3 格。如果收满 3 个还没拼中任何命令
-       （比如发了 "ABC" 这种杂鱼数据），count 已到 3，
-       再往 &Rxbuff[3] 写就越界、会破坏相邻内存 —— 必须强制复位重来。 */
-    if (count >= 3)
+    if (count >= 3)                     /* 越界保护：3 格收满没拼中命令，强制重来 */
     {
       count = 0;
       memset(Rxbuff, 0, sizeof(Rxbuff));
     }
 
-    /* ★ 最关键的一行：接收中断是「一次性」的，每收 1 个 HAL 就自动把它关掉。
-       必须重新挂上；而且注意写入位置是 &Rxbuff[count] ——
-       下一个字节落到正确的格子，命令才能一个个字符拼起来。 */
+    /* ★ 接收中断是一次性的，必须重新挂上；写到 &Rxbuff[count] 才能继续拼命令 */
     HAL_UART_Receive_IT(&huart2, &Rxbuff[count], 1);
   }
 }
 
-/**
-  * @brief  printf 重定向 —— printf 每输出一个字符，都会回头调用这个函数
-  * @note   需在 Keil 勾选 Options for Target → Target → Use MicroLIB
-  */
+/* printf 重定向（Keil 需勾 Use MicroLIB） */
 int fputc(int ch, FILE *f)
 {
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);   /* 阻塞发送这 1 个字节 */
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
   return ch;
 }
 /* USER CODE END 4 */

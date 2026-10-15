@@ -56,13 +56,10 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/**
-  * @brief  printf 重定向 —— printf 每输出一个字符，都会回头调用这个函数
-  * @note   需在 Keil 勾选 Options for Target → Target → Use MicroLIB
-  */
+/* printf 重定向（Keil 需勾 Use MicroLIB） */
 int fputc(int ch, FILE *f)
 {
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);   /* 阻塞发送这 1 个字节 */
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
   return ch;
 }
 /* USER CODE END 0 */
@@ -98,12 +95,9 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  /* 挂上接收：告诉 HAL「用中断方式，往 RxBuff 里收满 length 个字节就通知我」。
-     这行发出后立刻返回、不阻塞；之后每收到 1 字节进一次中断，
-     直到收满 length 个，才会调用回调函数。 */
-  HAL_UART_Receive_IT(&huart2, (uint8_t *)RxBuff, length);
+  HAL_UART_Receive_IT(&huart2, (uint8_t *)RxBuff, length);  /* 中断收 length 字节，收满进一次回调 */
 
-  printf("open receive uart\r\n");    /* 开机提示，顺便验证 printf 通不通 */
+  printf("open receive uart\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -158,23 +152,15 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-/**
-  * @brief  接收完成回调 —— 收满 length 个字节后，由 HAL 自动调用
-  * @param  huart 触发这次回调的串口句柄
-  * @note   函数名不能改：它是 HAL 里的 __weak 空函数，同名重写才会被调用
-  */
+/* 接收回调：收满 length 字节后 HAL 自动调用；HAL __weak 函数，名字不能改 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  if (huart->Instance == USART2)          /* 多个串口共用一个回调，必须判断是谁触发的 */
+  if (huart->Instance == USART2)          /* 判断是哪个串口触发 */
   {
-    printf("data:");                      /* 走 fputc → 阻塞发出，先提示 PC「下面是数据」 */
+    printf("data:");
+    HAL_UART_Transmit_IT(&huart2, RxBuff, length);   /* 回显刚收到的数据 */
 
-    /* 把刚收到的 length 个字节原样发回 PC（回显）。
-       异步发送：启动后立刻返回，HAL 在后台逐字节往外发。 */
-    HAL_UART_Transmit_IT(&huart2, RxBuff, length);
-
-    /* ★ 最关键的一行：接收中断是「一次性」的，收满一次后 HAL 会自动把它关掉。
-       不在这里重新挂上，就永远只能收到第一帧数据。 */
+    /* ★ 接收中断是一次性的，收完必须重新挂上，否则只能收第一帧 */
     HAL_UART_Receive_IT(&huart2, RxBuff, length);
   }
 }
